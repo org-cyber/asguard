@@ -1,3 +1,5 @@
+![Logo](<Gemini_Generated_Image_2r9uh62r9uh62r9u-removebg-preview (1).png>)
+
 # Asguard — AI-Powered Fraud Detection
 
 ![Version](https://img.shields.io/badge/version-1.0.0-blue.svg) ![Go](https://img.shields.io/badge/Go-1.25.6-00ADD8.svg) ![License](https://img.shields.io/badge/license-MIT-green.svg)
@@ -40,10 +42,10 @@ Asguard scores transactions using a weighted rule engine and optionally escalate
 - **AI Escalation:** Automatically calls an LLM (Groq AI `llama-3.3-70b-versatile`) for transactions crossing a risk threshold (Score >= 40) for a second opinion.
 - **RESTful API:** Clean, JSON-based API powered by Gin.
 - **API Key Security:** Built-in middleware for endpoint protection.
- - **Dockerized:** Instant local setup via `docker-compose`.
+- **Dockerized:** Instant local setup via `docker-compose`.
 
- - **API Key Security:** Built-in middleware for endpoint protection.
- - **Dockerized:** Instant local setup via `docker-compose`.
+- **API Key Security:** Built-in middleware for endpoint protection.
+- **Dockerized:** Instant local setup via `docker-compose`.
 
 ---
 
@@ -93,7 +95,7 @@ To run Asguard locally, you will need:
 - **[Docker & Docker Compose](https://www.docker.com/)** (Optional, for containerized local dev)
 - **Groq API Key:** Required for the AI-enhanced analysis. Get one at [console.groq.com](https://console.groq.com/).
 
- - **Groq API Key:** Required for the AI-enhanced analysis. Get one at [console.groq.com](https://console.groq.com/).
+- **Groq API Key:** Required for the AI-enhanced analysis. Get one at [console.groq.com](https://console.groq.com/).
 
 ---
 
@@ -145,11 +147,11 @@ _To stop the container gracefully, press `Ctrl+C` or run `docker compose down`._
 
 Asguard is configured entirely via environment variables.
 
-| Variable                    | Description                                           | Default | Required? |
-| --------------------------- | ----------------------------------------------------- | ------- | --------- |
-| `ASGUARD_API_KEY`           | The secret key required by clients to access the API. | None    | Yes       |
-| `GROQ_API_KEY`              | API key for the Groq LLM service.                     | None    | Yes       |
-| `PORT`                      | The port the Gin server will bind to.                 | `8081`  | No        |
+| Variable          | Description                                           | Default | Required? |
+| ----------------- | ----------------------------------------------------- | ------- | --------- |
+| `ASGUARD_API_KEY` | The secret key required by clients to access the API. | None    | Yes       |
+| `GROQ_API_KEY`    | API key for the Groq LLM service.                     | None    | Yes       |
+| `PORT`            | The port the Gin server will bind to.                 | `8081`  | No        |
 
 ---
 
