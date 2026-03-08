@@ -1,0 +1,201 @@
+openapi: 3.0.3
+info:
+  title: Asguard Face Verification API
+  description: |
+    Stateless face verification microservice. Generates 128D embeddings using dlib.
+    Part of the Asguard fraud detection platform.
+  version: 1.0.0
+  contact:
+    name: Asguard Team
+    
+servers:
+  - url: http://localhost:8082
+    description: Local development (Docker Compose)
+  - url: http://asguard-face:8082
+    description: Internal Docker network
+  - url: https://face-api.asguard.io
+    description: Production
+
+paths:
+  /v1/analyze:
+    post:
+      summary: Analyze face image quality and extract embedding
+      operationId: analyzeFace
+      tags:
+        - Face Analysis
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - image
+              properties:
+                image:
+                  type: string
+                  format: binary
+                  description: Image file (JPG/PNG, max 5MB)
+      responses:
+        '200':
+          description: Successful analysis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyzeResponse'
+        '400':
+          description: Bad request (no face, invalid image)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Server error
+
+  /v1/compare:
+    post:
+      summary: Compare two face images
+      operationId: compareFaces
+      tags:
+        - Face Comparison
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - image1
+                - image2
+              properties:
+                image1:
+                  type: string
+                  format: binary
+                  description: First image (e.g., ID document)
+                image2:
+                  type: string
+                  format: binary
+                  description: Second image (e.g., selfie)
+      responses:
+        '200':
+          description: Comparison result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompareResponse'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /health:
+    get:
+      summary: Health check
+      operationId: healthCheck
+      tags:
+        - System
+      responses:
+        '200':
+          description: Service status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+components:
+  schemas:
+    AnalyzeResponse:
+      type: object
+      required:
+        - success
+        - face_detected
+      properties:
+        success:
+          type: boolean
+          description: Whether analysis completed successfully
+        face_detected:
+          type: boolean
+          description: Whether a face was detected in the image
+        embedding:
+          type: array
+          items:
+            type: number
+            format: float
+          minItems: 128
+          maxItems: 128
+          description: 128-dimensional face embedding vector
+        quality:
+          $ref: '#/components/schemas/QualityMetrics'
+        error:
+          type: string
+          description: Error message if success=false
+
+    CompareResponse:
+      type: object
+      required:
+        - success
+        - match
+        - confidence
+        - distance
+      properties:
+        success:
+          type: boolean
+        match:
+          type: boolean
+          description: Whether faces match (distance < threshold)
+        confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: Confidence score from 0 to 1
+        distance:
+          type: number
+          format: float
+          description: Euclidean distance between embeddings
+        threshold:
+          type: number
+          default: 0.6
+          description: Threshold used for match decision
+
+    QualityMetrics:
+      type: object
+      properties:
+        brightness:
+          type: number
+          description: Normalized brightness score (0-1)
+        sharpness:
+          type: number
+          description: Laplacian variance for blur detection
+        face_ratio:
+          type: number
+          description: Face area / image area (0-1)
+        is_valid:
+          type: boolean
+          description: Whether image passes all quality checks
+
+    HealthResponse:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy, loading]
+        models_loaded:
+          type: boolean
+        version:
+          type: string
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+          description: Machine-readable error code

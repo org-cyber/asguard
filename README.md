@@ -31,7 +31,7 @@ Asguard is a real-time fraud detection platform combining rule-based risk scorin
 
 Asguard scores financial transactions using a weighted rule engine and optionally escalates higher-risk cases to an AI (LLM) analysis service. In addition, a dedicated **face microservice** enables biometric identity verification — accepting images, extracting 128-dimension facial embeddings using dlib, and comparing them against stored references.
 
-The system is designed to be lightweight, modular, containerized, and highly extensible.
+The system is designed to be lightweight, modular, containerized, and highly extensible. A responsive web UI for documentation and testing is provided in the `asguard-face` directory, complete with a custom logo.
 
 **Primary Use Cases:**
 
@@ -53,6 +53,7 @@ The system is designed to be lightweight, modular, containerized, and highly ext
 - **API Key Security:** Built-in auth middleware on all protected endpoints. The face service reads API keys from a comma-separated `API_KEYS` environment variable and validates `Authorization: Bearer <key>` headers.
 - **Request Tracing:** Each request to the face service is assigned a UUID-based `X-Request-ID` header for distributed tracing and log correlation.
 - **Image Quality Scoring:** The face service optionally computes brightness, sharpness (Laplacian variance), and face-size ratio to flag poor-quality images before processing.
+- **Client SDKs:** Auto-generated client SDKs in Go, Python, and TypeScript from a unified OpenAPI specification.
 - **Dockerized:** Full multi-service local setup via `docker-compose`.
 
 ---
@@ -354,6 +355,18 @@ Content-Type: application/json
 
 ---
 
+## Client SDKs
+
+Asguard provides auto-generated client SDKs for integrating the platform into your applications easily. The SDKs are generated using the OpenAPI Generator from the `combined-api.yaml` specification.
+
+- **Go SDK:** Located in `sdks/go`
+- **Python SDK:** Located in `sdks/python`
+- **TypeScript (Axios) SDK:** Located in `sdks/typescript`
+
+You can find a comprehensive example of how to use the Go SDK in the `test_go_sdk.go` file at the root of the repository.
+
+---
+
 ## Project Layout
 
 ```text
@@ -362,10 +375,17 @@ asguard/
 ├── ARCHITECTURE.md                # Deep-dive code walkthrough
 ├── CONTRIBUTING.md                # Contribution guidelines
 ├── docker-compose.yml             # Multi-service orchestration (backend + face)
+├── test_go_sdk.go                 # Example of using the Go SDK
 ├── models/                        # dlib model files (not committed to git)
 │   ├── shape_predictor_5_face_landmarks.dat
 │   ├── dlib_face_recognition_resnet_model_v1.dat
 │   └── mmod_human_face_detector.dat
+│
+├── sdks/                          # Auto-generated client SDKs
+│   ├── openapi/                   # OpenAPI Yaml specification
+│   ├── go/                        # Go Client SDK
+│   ├── python/                    # Python Client SDK
+│   └── typescript/                # TypeScript Client SDK
 │
 ├── backend/                       # Transaction risk scoring service
 │   ├── main.go                    # Entry point, Gin router setup

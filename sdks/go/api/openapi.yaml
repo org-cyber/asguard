@@ -1,0 +1,419 @@
+openapi: 3.0.3
+info:
+  description: |
+    Complete Asguard platform SDK - Fraud Detection + Face Verification.
+    Two independent microservices, one unified client.
+  title: Asguard API
+  version: 1.0.0
+servers:
+- description: Fraud Service (local)
+  url: http://localhost:8081
+- description: Face Service (local)
+  url: http://localhost:8082
+tags:
+- description: Transaction risk scoring
+  name: Fraud Detection
+- description: Biometric identity verification
+  name: Face Verification
+- description: Health checks
+  name: System
+paths:
+  /analyze:
+    post:
+      operationId: checkFraud
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FraudCheckRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FraudCheckResponse"
+          description: Risk assessment completed
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Invalid request
+      security:
+      - ApiKeyAuth: []
+      summary: Check transaction for fraud risk
+      tags:
+      - Fraud Detection
+  /fraud/health:
+    get:
+      operationId: healthCheckFraud
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+          description: Service status
+      summary: Fraud service health check
+      tags:
+      - System
+  /v1/analyze:
+    post:
+      operationId: analyzeFace
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/analyzeFace_request"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyzeResponse"
+          description: Face analyzed successfully
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Invalid image or no face detected
+      security:
+      - BearerAuth: []
+      summary: Analyze face image quality and extract embedding
+      tags:
+      - Face Verification
+  /v1/compare:
+    post:
+      operationId: compareFaces
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/compareFaces_request"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompareResponse"
+          description: Comparison completed
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Invalid input
+      security:
+      - BearerAuth: []
+      summary: Compare a probe face image with a reference embedding
+      tags:
+      - Face Verification
+  /face/health:
+    get:
+      operationId: healthCheckFace
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+          description: Service status
+      summary: Face service health check
+      tags:
+      - System
+components:
+  schemas:
+    FraudCheckRequest:
+      example:
+        transaction_id: transaction_id
+        amount: 0.8008282
+        device_id: device_id
+        user_id: user_id
+        currency: currency
+        location: location
+        ip_address: ip_address
+        timestamp: 2000-01-23T04:56:07.000+00:00
+      properties:
+        transaction_id:
+          description: Unique transaction identifier
+          type: string
+        amount:
+          description: Transaction amount
+          format: float
+          type: number
+        currency:
+          description: "ISO 4217 currency code (USD, EUR, etc.)"
+          type: string
+        user_id:
+          description: Customer identifier
+          type: string
+        device_id:
+          description: Device fingerprint
+          type: string
+        ip_address:
+          description: Customer IP address
+          type: string
+        location:
+          description: "Geo location (city, country)"
+          type: string
+        timestamp:
+          description: Transaction timestamp
+          format: date-time
+          type: string
+      required:
+      - amount
+      - currency
+      - transaction_id
+      - user_id
+      type: object
+    FraudCheckResponse:
+      example:
+        transaction_id: transaction_id
+        risk_level: LOW
+        ai_triggered: true
+        processing_time_ms: 5
+        reasons:
+        - reasons
+        - reasons
+        ai_summary: ai_summary
+        risk_score: 0.8008282
+        ai_fraud_probability: 1.4658129
+        ai_confidence: 6.0274563
+        message: message
+        ai_recommendation: ai_recommendation
+      properties:
+        transaction_id:
+          type: string
+        risk_score:
+          format: float
+          type: number
+        risk_level:
+          enum:
+          - LOW
+          - MEDIUM
+          - HIGH
+          - CRITICAL
+          type: string
+        reasons:
+          items:
+            type: string
+          type: array
+        ai_triggered:
+          type: boolean
+        ai_confidence:
+          format: float
+          type: number
+        ai_recommendation:
+          type: string
+        ai_fraud_probability:
+          format: float
+          type: number
+        ai_summary:
+          type: string
+        message:
+          type: string
+        processing_time_ms:
+          description: Request processing time in milliseconds
+          type: integer
+      required:
+      - risk_level
+      - risk_score
+      - transaction_id
+      type: object
+    AnalyzeResponse:
+      example:
+        processing_time_ms: 2
+        brightness: 5.962134
+        face_size_ratio: 5.637377
+        success: true
+        quality_score: 6.0274563
+        warnings:
+        - warnings
+        - warnings
+        face_detected: true
+        embedding:
+        - 0.8008282
+        - 0.8008282
+        - 0.8008282
+        - 0.8008282
+        - 0.8008282
+        sharpness: 1.4658129
+        error: error
+      properties:
+        success:
+          description: Whether analysis succeeded
+          type: boolean
+        face_detected:
+          description: Whether a face was found
+          type: boolean
+        embedding:
+          description: 128-dimensional face embedding vector (if face detected)
+          items:
+            format: float
+            type: number
+          maxItems: 128
+          minItems: 128
+          type: array
+        quality_score:
+          description: Overall quality score (0-1)
+          format: float
+          type: number
+        sharpness:
+          description: Normalized sharpness score (0-1)
+          format: float
+          type: number
+        brightness:
+          description: Normalized brightness score (0-1)
+          format: float
+          type: number
+        face_size_ratio:
+          description: Face area relative to image (0-1)
+          format: float
+          type: number
+        warnings:
+          description: "List of quality warnings (e.g., \"too_dark\", \"too_blurry\"\
+            )"
+          items:
+            type: string
+          type: array
+        processing_time_ms:
+          description: Request processing time in milliseconds
+          type: integer
+        error:
+          description: Error message if success=false
+          type: string
+      required:
+      - face_detected
+      - success
+      type: object
+    CompareResponse:
+      example:
+        processing_time_ms: 5
+        distance: 6.0274563
+        threshold_used: 1.4658129
+        probe_quality: 5.962134
+        success: true
+        confidence: 0.08008282
+        match: true
+        error: error
+      properties:
+        success:
+          type: boolean
+        match:
+          description: Whether faces match (distance < threshold_used)
+          type: boolean
+        confidence:
+          description: Match confidence score (0-1)
+          format: float
+          maximum: 1
+          minimum: 0
+          type: number
+        distance:
+          description: Euclidean distance between embeddings
+          format: float
+          type: number
+        threshold_used:
+          description: The distance threshold used for this comparison
+          format: float
+          type: number
+        probe_quality:
+          description: Quality score of the probe image (0-1)
+          format: float
+          type: number
+        processing_time_ms:
+          type: integer
+        error:
+          type: string
+      required:
+      - confidence
+      - distance
+      - match
+      - success
+      - threshold_used
+      type: object
+    HealthResponse:
+      example:
+        models_loaded: true
+        version: version
+        status: healthy
+      properties:
+        status:
+          enum:
+          - healthy
+          - unhealthy
+          - loading
+          type: string
+        models_loaded:
+          description: Whether ML models are loaded (relevant for face service)
+          type: boolean
+        version:
+          type: string
+      required:
+      - status
+      type: object
+    ErrorResponse:
+      example:
+        code: code
+        details: "{}"
+        error: error
+      properties:
+        error:
+          type: string
+        code:
+          description: Machine-readable error code
+          type: string
+        details:
+          description: Additional error context
+          type: object
+      required:
+      - error
+      type: object
+    analyzeFace_request:
+      properties:
+        image:
+          description: Base64-encoded image (with optional data URI prefix)
+          type: string
+        quality_checks:
+          default: false
+          description: "Enable quality checks (sharpness, brightness, face size)"
+          type: boolean
+      required:
+      - image
+      type: object
+    compareFaces_request:
+      properties:
+        probe_image:
+          description: Base64-encoded image (with optional data URI prefix)
+          type: string
+        reference_embedding:
+          description: 128-dimensional embedding of the reference face
+          items:
+            format: float
+            type: number
+          maxItems: 128
+          minItems: 128
+          type: array
+        threshold:
+          default: 0.6
+          description: Distance threshold for matching (lower = stricter)
+          format: float
+          type: number
+      required:
+      - probe_image
+      - reference_embedding
+      type: object
+  securitySchemes:
+    ApiKeyAuth:
+      description: API key for Fraud service
+      in: header
+      name: X-API-Key
+      type: apiKey
+    BearerAuth:
+      bearerFormat: API Key or JWT
+      description: Bearer token for Face service (use the API key as token)
+      scheme: bearer
+      type: http

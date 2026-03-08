@@ -1,0 +1,368 @@
+openapi: 3.0.3
+info:
+  title: Asguard API
+  description: |
+    Complete Asguard platform SDK - Fraud Detection + Face Verification.
+    Two independent microservices, one unified client.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8081
+    description: Fraud Service (local)
+  - url: http://localhost:8082
+    description: Face Service (local)
+
+tags:
+  - name: Fraud Detection
+    description: Transaction risk scoring
+  - name: Face Verification
+    description: Biometric identity verification
+  - name: System
+    description: Health checks
+
+paths:
+  # -------- FRAUD SERVICE (Port 8081) --------
+  /analyze:
+    post:
+      summary: Check transaction for fraud risk
+      operationId: checkFraud
+      tags:
+        - Fraud Detection
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FraudCheckRequest"
+      responses:
+        "200":
+          description: Risk assessment completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FraudCheckResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /fraud/health:
+    get:
+      summary: Fraud service health check
+      operationId: healthCheckFraud
+      tags:
+        - System
+      responses:
+        "200":
+          description: Service status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  # -------- FACE SERVICE (Port 8082) --------
+  /v1/analyze:
+    post:
+      summary: Analyze face image quality and extract embedding
+      operationId: analyzeFace
+      tags:
+        - Face Verification
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - image
+              properties:
+                image:
+                  type: string
+                  description: Base64-encoded image (with optional data URI prefix)
+                quality_checks:
+                  type: boolean
+                  default: false
+                  description: Enable quality checks (sharpness, brightness, face size)
+      responses:
+        "200":
+          description: Face analyzed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyzeResponse"
+        "400":
+          description: Invalid image or no face detected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/compare:
+    post:
+      summary: Compare a probe face image with a reference embedding
+      operationId: compareFaces
+      tags:
+        - Face Verification
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - probe_image
+                - reference_embedding
+              properties:
+                probe_image:
+                  type: string
+                  description: Base64-encoded image (with optional data URI prefix)
+                reference_embedding:
+                  type: array
+                  items:
+                    type: number
+                    format: float
+                  minItems: 128
+                  maxItems: 128
+                  description: 128-dimensional embedding of the reference face
+                threshold:
+                  type: number
+                  format: float
+                  default: 0.6
+                  description: Distance threshold for matching (lower = stricter)
+      responses:
+        "200":
+          description: Comparison completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompareResponse"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /face/health:
+    get:
+      summary: Face service health check
+      operationId: healthCheckFace
+      tags:
+        - System
+      responses:
+        "200":
+          description: Service status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key for Fraud service
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: API Key or JWT
+      description: Bearer token for Face service (use the API key as token)
+
+  schemas:
+    # -------- FRAUD MODELS --------
+    FraudCheckRequest:
+      type: object
+      required:
+        - transaction_id
+        - amount
+        - currency
+        - user_id
+      properties:
+        transaction_id:
+          type: string
+          description: Unique transaction identifier
+        amount:
+          type: number
+          format: float
+          description: Transaction amount
+        currency:
+          type: string
+          description: ISO 4217 currency code (USD, EUR, etc.)
+        user_id:
+          type: string
+          description: Customer identifier
+        device_id:
+          type: string
+          description: Device fingerprint
+        ip_address:
+          type: string
+          description: Customer IP address
+        location:
+          type: string
+          description: Geo location (city, country)
+        timestamp:
+          type: string
+          format: date-time
+          description: Transaction timestamp
+
+    FraudCheckResponse:
+      type: object
+      required:
+        - transaction_id
+        - risk_score
+        - risk_level
+      properties:
+        transaction_id:
+          type: string
+        risk_score:
+          type: number
+          format: float
+        risk_level:
+          type: string
+          enum: [LOW, MEDIUM, HIGH, CRITICAL]
+        reasons:
+          type: array
+          items:
+            type: string
+        ai_triggered:
+          type: boolean
+        ai_confidence:
+          type: number
+          format: float
+        ai_recommendation:
+          type: string
+        ai_fraud_probability:
+          type: number
+          format: float
+        ai_summary:
+          type: string
+        message:
+          type: string
+        processing_time_ms:
+          type: integer
+          description: Request processing time in milliseconds
+
+    # -------- FACE MODELS --------
+    AnalyzeResponse:
+      type: object
+      required:
+        - success
+        - face_detected
+      properties:
+        success:
+          type: boolean
+          description: Whether analysis succeeded
+        face_detected:
+          type: boolean
+          description: Whether a face was found
+        embedding:
+          type: array
+          items:
+            type: number
+            format: float
+          minItems: 128
+          maxItems: 128
+          description: 128-dimensional face embedding vector (if face detected)
+        quality_score:
+          type: number
+          format: float
+          description: Overall quality score (0-1)
+        sharpness:
+          type: number
+          format: float
+          description: Normalized sharpness score (0-1)
+        brightness:
+          type: number
+          format: float
+          description: Normalized brightness score (0-1)
+        face_size_ratio:
+          type: number
+          format: float
+          description: Face area relative to image (0-1)
+        warnings:
+          type: array
+          items:
+            type: string
+          description: List of quality warnings (e.g., "too_dark", "too_blurry")
+        processing_time_ms:
+          type: integer
+          description: Request processing time in milliseconds
+        error:
+          type: string
+          description: Error message if success=false
+
+    CompareResponse:
+      type: object
+      required:
+        - success
+        - match
+        - confidence
+        - distance
+        - threshold_used
+      properties:
+        success:
+          type: boolean
+        match:
+          type: boolean
+          description: Whether faces match (distance < threshold_used)
+        confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: Match confidence score (0-1)
+        distance:
+          type: number
+          format: float
+          description: Euclidean distance between embeddings
+        threshold_used:
+          type: number
+          format: float
+          description: The distance threshold used for this comparison
+        probe_quality:
+          type: number
+          format: float
+          description: Quality score of the probe image (0-1)
+        processing_time_ms:
+          type: integer
+        error:
+          type: string
+
+    # -------- SHARED MODELS --------
+    HealthResponse:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy, loading]
+        models_loaded:
+          type: boolean
+          description: Whether ML models are loaded (relevant for face service)
+        version:
+          type: string
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+          description: Machine-readable error code
+        details:
+          type: object
+          description: Additional error context
