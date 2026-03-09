@@ -359,11 +359,31 @@ Content-Type: application/json
 
 Asguard provides auto-generated client SDKs for integrating the platform into your applications easily. The SDKs are generated using the OpenAPI Generator from the `combined-api.yaml` specification.
 
-- **Go SDK:** Located in `sdks/go`
-- **Python SDK:** Located in `sdks/python`
-- **TypeScript (Axios) SDK:** Located in `sdks/typescript`
+### Installation
 
-You can find a comprehensive example of how to use the Go SDK in the `test_go_sdk.go` file at the root of the repository.
+- **Go SDK:**
+
+  ```bash
+  go get github.com/org-cyber/asguard/sdks/go
+  ```
+
+  _(Located locally in `sdks/go`)_
+
+- **Python SDK:**
+
+  ```bash
+  pip install asguard
+  ```
+
+  _(Located locally in `sdks/python`)_
+
+- **TypeScript (Axios) SDK:**
+  ```bash
+  npm install @org-cyber/asguard
+  ```
+  _(Located locally in `sdks/typescript`)_
+
+You can find comprehensive examples of how to use each SDK within their respective directories and in the root `test_go_sdk.go` / `test_python_sdk.py` / `test_typescript_sdk.ts` files.
 
 ---
 

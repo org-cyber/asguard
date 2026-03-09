@@ -1,18 +1,23 @@
 {
-  "name": "asguard",
+  "name": "@org-cyber/asguard",
   "version": "1.0.0",
   "description": "OpenAPI client for asguard",
   "author": "Pixelpro",
   "repository": {
     "type": "git",
-    "url": "https://github.com/org-cyber/asguard"
+    "url": "git+https://github.com/org-cyber/asguard.git"
   },
   "keywords": [
     "axios",
     "typescript",
     "openapi-client",
     "openapi-generator",
-    "asguard"
+    "asguard",
+    "fraud-detection",
+    "face-verification",
+    "ai",
+    "security",
+    "sdk"
   ],
   "license": "Apache-2.0",
   "main": "./dist/index.js",
@@ -21,6 +26,10 @@
     "build": "tsc",
     "prepare": "npm run build"
   },
+  "bugs": {
+    "url": "https://github.com/org-cyber/asguard/issues"
+  },
+  "homepage": "https://github.com/org-cyber/asguard#readme",
   "dependencies": {
     "axios": "^1.13.5"
   },

@@ -1,89 +1,153 @@
-## asguard@1.0.0
+# TypeScript (Axios) API client for Asguard
 
-This generator creates TypeScript/JavaScript client that utilizes [axios](https://github.com/axios/axios). The generated Node module can be used in the following environments:
+Complete Asguard platform SDK - Fraud Detection + Face Verification.
+Two independent microservices, one unified client.
 
-Environment
-* Node.js
-* Webpack
-* Browserify
+## Overview
 
-Language level
-* ES5 - you must have a Promises/A+ library installed
-* ES6
+A Promise-based, TypeScript compatible API client wrapper extending Axios syntax to interact seamlessly with Asguard capabilities.
 
-Module system
-* CommonJS
-* ES6 module system
+- SDK package: `@org-cyber/asguard`
+- Requirements: `Node.js >= 14`, `Axios >= 1.0`
 
-It can be used in both TypeScript and JavaScript. In TypeScript, the definition will be automatically resolved via `package.json`. ([Reference](https://www.typescriptlang.org/docs/handbook/declaration-files/consumption.html))
+## Installation
 
-### Building
+Using `npm` to pull down the compiled SDK interfaces:
 
-To build and compile the typescript sources to javascript use:
-```
-npm install
-npm run build
+```bash
+npm install @org-cyber/asguard
 ```
 
-### Publishing
+## Getting Started
 
-First build the package then run `npm publish`
+The TypeScript SDK abstracts all endpoints gracefully behind Promises. To configure these successfully, be sure to declare endpoints appropriately in initial `Configuration` dictionaries. Let's cover establishing connections to **both** Face API and Fraud API.
 
-### Consuming
+### 1. Connecting Clients
 
-navigate to the folder of your consuming project and run one of the following commands.
+```typescript
+import {
+  Configuration,
+  FraudDetectionApi,
+  FaceVerificationApi,
+} from "@org-cyber/asguard";
 
-_published:_
+// Set up Fraud - Note the X-API-Key injected into Axios headers
+const fraudConfig = new Configuration({
+  basePath: "http://localhost:8081",
+  baseOptions: {
+    headers: {
+      "X-API-Key": "devsecret",
+    },
+  },
+});
+const fraudApi = new FraudDetectionApi(fraudConfig);
 
+// Set up Face - Note Bearer Authentication injected via headers
+const faceConfig = new Configuration({
+  basePath: "http://localhost:8082",
+  baseOptions: {
+    headers: {
+      Authorization: "Bearer dev-key-123",
+    },
+  },
+});
+const faceApi = new FaceVerificationApi(faceConfig);
 ```
-npm install asguard@1.0.0 --save
+
+### 2. Issuing Fraud Checks
+
+The SDK manages type generation perfectly, utilizing defined Interfaces like `FraudCheckRequest` to resolve type anomalies before compilation:
+
+```typescript
+import { FraudCheckRequest } from "@org-cyber/asguard";
+
+async function verifySale() {
+  const payload: FraudCheckRequest = {
+    user_id: "user_123",
+    transaction_id: "txn_456",
+    amount: 250000.0,
+    currency: "USD",
+    ip_address: "192.168.1.5",
+    device_id: "device_789",
+  };
+
+  try {
+    // Under Axios, the parsed payload resolves within the '.data' attribute
+    const response = await fraudApi.checkFraud(payload);
+    const result = response.data;
+
+    console.log(`Risk Score: ${result.risk_score}`);
+    console.log(`Risk Level: ${result.risk_level}`);
+
+    if (result.ai_triggered) {
+      console.log(`Alert AI Analysis: ${result.ai_recommendation}`);
+      console.log(`Review details: ${result.ai_summary}`);
+    }
+  } catch (e: any) {
+    console.error("HTTP Failure:", e.response?.data || e.message);
+  }
+}
 ```
 
-_unPublished (not recommended):_
+### 3. Evaluating Biometrics
 
+With TypeScript/NodeJS scripts, handling Base64 encodes is essential to parsing image attributes correctly to our Golang Face API parser.
+
+```typescript
+import * as fs from "fs";
+import { AnalyzeFaceRequest, CompareFacesRequest } from "@org-cyber/asguard";
+
+async function verifyFaceId() {
+  // 1. Buffer the image into Base64 formats
+  const imageBytes = fs.readFileSync("testface.jpg");
+  const base64Image = imageBytes.toString("base64");
+  const dataURI = `data:image/jpeg;base64,${base64Image}`;
+
+  try {
+    // 2. Transmit to Extract Neural Embeddings
+    const extractOpts: AnalyzeFaceRequest = {
+      image: dataURI,
+      quality_checks: true,
+    };
+
+    const analysis = await faceApi.analyzeFace(extractOpts);
+    const aResult = analysis.data;
+
+    if (!aResult.success) {
+      console.error(aResult.error);
+      return;
+    }
+
+    console.log(
+      `System extracted embeddings vector of size ${aResult.embedding.length}`,
+    );
+
+    // 3. Forward the Embedding and DataURI backward into the comparison algorithm!
+    const compareOpts: CompareFacesRequest = {
+      probe_image: dataURI,
+      reference_embedding: aResult.embedding,
+      threshold: 0.6,
+    };
+
+    const compare = await faceApi.compareFaces(compareOpts);
+    const cResult = compare.data;
+
+    if (cResult.match) {
+      console.log(
+        `Similarity Identified! Final Confidence Rate Modeled at ${cResult.confidence}`,
+      );
+    }
+  } catch (e: any) {
+    console.error(
+      "Biometrics Engine Rejection:",
+      e.response?.data || e.message,
+    );
+  }
+}
 ```
-npm install PATH_TO_GENERATED_PACKAGE --save
-```
 
-### Documentation for API Endpoints
+## Types and Documentation
 
-All URIs are relative to *http://localhost:8081*
+As part of the install base, complete TypeScript index typings (`index.d.ts`) natively populate hints across VS Code and JetBrains IDE deployments outlining field scopes implicitly!
 
-Class | Method | HTTP request | Description
------------- | ------------- | ------------- | -------------
-*FaceVerificationApi* | [**analyzeFace**](docs/FaceVerificationApi.md#analyzeface) | **POST** /v1/analyze | Analyze face image quality and extract embedding
-*FaceVerificationApi* | [**compareFaces**](docs/FaceVerificationApi.md#comparefaces) | **POST** /v1/compare | Compare a probe face image with a reference embedding
-*FraudDetectionApi* | [**checkFraud**](docs/FraudDetectionApi.md#checkfraud) | **POST** /analyze | Check transaction for fraud risk
-*SystemApi* | [**healthCheckFace**](docs/SystemApi.md#healthcheckface) | **GET** /face/health | Face service health check
-*SystemApi* | [**healthCheckFraud**](docs/SystemApi.md#healthcheckfraud) | **GET** /fraud/health | Fraud service health check
-
-
-### Documentation For Models
-
- - [AnalyzeFaceRequest](docs/AnalyzeFaceRequest.md)
- - [AnalyzeResponse](docs/AnalyzeResponse.md)
- - [CompareFacesRequest](docs/CompareFacesRequest.md)
- - [CompareResponse](docs/CompareResponse.md)
- - [ErrorResponse](docs/ErrorResponse.md)
- - [FraudCheckRequest](docs/FraudCheckRequest.md)
- - [FraudCheckResponse](docs/FraudCheckResponse.md)
- - [HealthResponse](docs/HealthResponse.md)
-
-
-<a id="documentation-for-authorization"></a>
-## Documentation For Authorization
-
-
-Authentication schemes defined for the API:
-<a id="ApiKeyAuth"></a>
-### ApiKeyAuth
-
-- **Type**: API key
-- **API key parameter name**: X-API-Key
-- **Location**: HTTP header
-
-<a id="BearerAuth"></a>
-### BearerAuth
-
-- **Type**: Bearer authentication (API Key or JWT)
-
+Refer to `/docs` nested within the TypeScript installation locally for raw markdown evaluations of Models and Definitions.
