@@ -14,6 +14,9 @@ services:
       - ./backend:/app
    # command: ["go", "run", "main.go"]
 
+  
+
+
     
   asguard-face:
     build: ./asguard-face

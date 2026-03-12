@@ -1,0 +1,16 @@
+version: "2"
+sql:
+  - engine: "postgresql" # We're using PostgreSQL (not SQLite)
+    queries: "queries.sql" # Where our SQL queries live
+    schema: "schema.sql" # Where our table definitions live
+    gen:
+      go:
+        package: "db" # Go package name
+        out: "internal/db" # Where to write generated files
+        sql_package: "pgx/v5" # Use pgx (modern Postgres driver, supports JSONB well)
+
+        # Generate these helpers
+        emit_json_tags: true # Add `json:"field"` tags to structs
+        emit_pointers_for_null_types: true # Use *string instead of sql.NullString
+        emit_interface: true # Generate Querier interface (good for testing)
+        emit_empty_slices: true # Return []T instead of nil for no results
