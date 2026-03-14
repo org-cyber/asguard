@@ -122,6 +122,7 @@ func (re *RuleEngine) Validate(ctx context.Context, tenantID pgtype.UUID, req Va
 		Score:        0,
 		RulesMatched: []string{},
 	}
+	var matchedIDs []pgtype.UUID
 
 	// 2. Evaluate each rule in priority order
 	for _, rule := range rules {
@@ -156,7 +157,8 @@ func (re *RuleEngine) Validate(ctx context.Context, tenantID pgtype.UUID, req Va
 			continue
 		}
 
-		// Rule matched!
+		// Rule matched! - add its ID and name
+		matchedIDs = append(matchedIDs, rule.ID)
 		result.RulesMatched = append(result.RulesMatched, rule.Name)
 
 		// Apply action (unchanged)
@@ -164,20 +166,89 @@ func (re *RuleEngine) Validate(ctx context.Context, tenantID pgtype.UUID, req Va
 		case "allow":
 			result.Decision = "allow"
 			result.Reason = fmt.Sprintf("Rule '%s' explicitly allowed", rule.Name)
+			processingTime := int(time.Since(start).Milliseconds())
+			inputBytes, _ := json.Marshal(req.Input)
+			finalScore := int32(result.Score)
+			_, err = re.queries.CreateDecision(ctx, db.CreateDecisionParams{
+				TenantID:         tenantID,
+				Context:          req.Context,
+				Input:            inputBytes,
+				MatchedRules:     matchedIDs,
+				Decision:         result.Decision,
+				FinalScore:       &finalScore,
+				Reason:           &result.Reason,
+				ProcessingTimeMs: int32(processingTime),
+			})
+			if err != nil {
+				fmt.Printf("Failed to log decision: %v\n", err)
+			}
+			result.ProcessingTimeMs = processingTime
 			return result, nil
 		case "block":
 			result.Decision = "block"
 			result.Reason = fmt.Sprintf("Rule '%s' blocked: %s", rule.Name, rule.Condition)
+			processingTime := int(time.Since(start).Milliseconds())
+			inputBytes, _ := json.Marshal(req.Input)
+			finalScore := int32(result.Score)
+			_, err = re.queries.CreateDecision(ctx, db.CreateDecisionParams{
+				TenantID:         tenantID,
+				Context:          req.Context,
+				Input:            inputBytes,
+				MatchedRules:     matchedIDs,
+				Decision:         result.Decision,
+				FinalScore:       &finalScore,
+				Reason:           &result.Reason,
+				ProcessingTimeMs: int32(processingTime),
+			})
+			if err != nil {
+				fmt.Printf("Failed to log decision: %v\n", err)
+			}
+			result.ProcessingTimeMs = processingTime
 			return result, nil
 		case "challenge":
 			result.Decision = "challenge"
 			result.Reason = fmt.Sprintf("Rule '%s' requires challenge", rule.Name)
+			processingTime := int(time.Since(start).Milliseconds())
+			inputBytes, _ := json.Marshal(req.Input)
+			finalScore := int32(result.Score)
+			_, err = re.queries.CreateDecision(ctx, db.CreateDecisionParams{
+				TenantID:         tenantID,
+				Context:          req.Context,
+				Input:            inputBytes,
+				MatchedRules:     matchedIDs,
+				Decision:         result.Decision,
+				FinalScore:       &finalScore,
+				Reason:           &result.Reason,
+				ProcessingTimeMs: int32(processingTime),
+			})
+			if err != nil {
+				fmt.Printf("Failed to log decision: %v\n", err)
+			}
+			result.ProcessingTimeMs = processingTime
+			return result, nil
 		case "score":
 			if rule.Score != nil {
 				result.Score += int(*rule.Score)
 			}
 		case "flag":
-			// just continue
+			processingTime := int(time.Since(start).Milliseconds())
+			inputBytes, _ := json.Marshal(req.Input)
+			finalScore := int32(result.Score)
+			_, err = re.queries.CreateDecision(ctx, db.CreateDecisionParams{
+				TenantID:         tenantID,
+				Context:          req.Context,
+				Input:            inputBytes,
+				MatchedRules:     matchedIDs,
+				Decision:         result.Decision,
+				FinalScore:       &finalScore,
+				Reason:           &result.Reason,
+				ProcessingTimeMs: int32(processingTime),
+			})
+			if err != nil {
+				fmt.Printf("Failed to log decision: %v\n", err)
+			}
+			result.ProcessingTimeMs = processingTime
+			return result, nil
 		}
 	}
 
@@ -192,7 +263,7 @@ func (re *RuleEngine) Validate(ctx context.Context, tenantID pgtype.UUID, req Va
 
 	// 4. Log decision (unchanged)
 	processingTime := int(time.Since(start).Milliseconds())
-	matchedRuleIDs := make([]pgtype.UUID, len(result.RulesMatched))
+
 	// ... (you still need to populate matchedRuleIDs properly)
 	inputBytes, _ := json.Marshal(req.Input)
 	finalScore := int32(result.Score)
@@ -201,7 +272,7 @@ func (re *RuleEngine) Validate(ctx context.Context, tenantID pgtype.UUID, req Va
 		TenantID:         tenantID,
 		Context:          req.Context,
 		Input:            inputBytes,
-		MatchedRules:     matchedRuleIDs,
+		MatchedRules:     matchedIDs,
 		Decision:         result.Decision,
 		FinalScore:       &finalScore,
 		Reason:           &result.Reason,
