@@ -138,12 +138,12 @@ A CEL-powered rule engine backed by PostgreSQL. Rules are stored in the database
 | Endpoint           | Method | Auth Required | Description                                              |
 | ------------------ | ------ | :-----------: | -------------------------------------------------------- |
 | `/health`          | GET    | No            | Service health check                                     |
-| `/v1/validate`     | POST   | No            | Evaluate all rules for a context against a JSON input    |
-| `/v1/rules`        | GET    | No            | List all rules (optional `?context=` filter)             |
-| `/v1/rules`        | POST   | No            | Create a new rule                                        |
-| `/v1/rules/{id}`   | GET    | No            | Get a rule by ID                                         |
-| `/v1/rules/{id}`   | PUT    | No            | Update a rule                                            |
-| `/v1/rules/{id}`   | DELETE | No            | Hard-delete a rule                                       |
+| `/v1/validate`     | POST   | Yes (Bearer token) | Evaluate all rules for a context against a JSON input    |
+| `/v1/rules`        | GET    | Yes (Bearer token) | List all rules (optional `?context=` filter)             |
+| `/v1/rules`        | POST   | Yes (Bearer token) | Create a new rule                                        |
+| `/v1/rules/{id}`   | GET    | Yes (Bearer token) | Get a rule by ID                                         |
+| `/v1/rules/{id}`   | PUT    | Yes (Bearer token) | Update a rule                                            |
+| `/v1/rules/{id}`   | DELETE | Yes (Bearer token) | Hard-delete a rule                                       |
 
 > **Full documentation:** See [`general/README.md`](general/README.md) for architecture diagrams, CEL expression guide, database schema, and complete API reference.
 
@@ -212,8 +212,12 @@ docker compose up -d
 ```bash
 # Step 2: Run the engine
 go mod download
-go run ./cmd/server/
+JWT_SECRET=super-secret-key go run ./cmd/server/
 # Output: General Validation Engine starting on port 8083
+
+# Step 3: Generate a token for testing
+go run token.go
+# Outputs a JWT valid for 24 hours
 ```
 
 The engine connects to: `postgres://asguard:devpassword@localhost:5433/general_engine`
@@ -276,6 +280,7 @@ The connection string is currently hardcoded in `general/cmd/server/main.go`. Fo
 | Database          | `general_engine`                                                   |
 | Port              | `5433` (host) → `5432` (container)                                 |
 | Engine port       | `8083`                                                             |
+| JWT Secret        | `JWT_SECRET` env var for API token authentication                  |
 
 ---
 
@@ -425,6 +430,7 @@ Content-Type: application/json
 
 ```http
 POST http://localhost:8083/v1/validate
+Authorization: Bearer <YOUR_JWT_TOKEN>
 Content-Type: application/json
 ```
 
@@ -455,6 +461,7 @@ Content-Type: application/json
 
 ```http
 POST http://localhost:8083/v1/rules
+Authorization: Bearer <YOUR_JWT_TOKEN>
 Content-Type: application/json
 ```
 

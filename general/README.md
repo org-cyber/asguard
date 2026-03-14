@@ -417,10 +417,12 @@ psql "postgres://asguard:devpassword@localhost:5433/general_engine"
 
 ### 2. Run the Engine
 
+The engine uses JSON Web Tokens (JWT) to authenticate requests and isolate rules by `tenant_id`. You must provide a `JWT_SECRET` environment variable to run the engine.
+
 ```bash
 cd asguard/general
 go mod download
-go run ./cmd/server/
+JWT_SECRET=super-secret-key go run ./cmd/server/
 ```
 
 Expected output:
@@ -430,6 +432,20 @@ Expected output:
 ```
 
 The engine is now ready at `http://localhost:8083`.
+
+### 3. Generate a JWT Token
+
+Before making API calls, generate a valid JWT token. You can use the included `token.go` script:
+
+```bash
+# Export the same secret
+export JWT_SECRET=super-secret-key
+
+# Run the token generation script
+go run token.go
+```
+
+The script generates a token with a `tenant_id` claim (e.g., `"tenant-acme-corp"`). The engine automatically converts this string to a deterministic UUID to securely partition and query the rules and decisions logic.
 
 ---
 
@@ -460,6 +476,7 @@ The core endpoint. Evaluates all active rules for the given `context` against th
 
 ```http
 POST http://localhost:8083/v1/validate
+Authorization: Bearer <YOUR_JWT_TOKEN>
 Content-Type: application/json
 ```
 
@@ -504,10 +521,11 @@ Content-Type: application/json
 
 ### List Rules — `GET /v1/rules`
 
-Returns all rules for the (currently hardcoded) tenant. Supports optional context filtering.
+Returns all rules for the tenant (derived from the active JWT token). Supports optional context filtering.
 
 ```http
 GET http://localhost:8083/v1/rules
+Authorization: Bearer <YOUR_JWT_TOKEN>
 GET http://localhost:8083/v1/rules?context=user_login
 ```
 
@@ -538,6 +556,7 @@ Creates a new rule. The rule becomes **effective immediately** on the next valid
 
 ```http
 POST http://localhost:8083/v1/rules
+Authorization: Bearer <YOUR_JWT_TOKEN>
 Content-Type: application/json
 ```
 
@@ -563,6 +582,7 @@ Content-Type: application/json
 
 ```http
 GET http://localhost:8083/v1/rules/a1b2c3d4-e5f6-7890-abcd-ef1234567890
+Authorization: Bearer <YOUR_JWT_TOKEN>
 ```
 
 **Response:** Single rule object, or `404 Not Found`.
@@ -575,6 +595,7 @@ Updates all fields of an existing rule. The `context` field **can** be updated v
 
 ```http
 PUT http://localhost:8083/v1/rules/a1b2c3d4-e5f6-7890-abcd-ef1234567890
+Authorization: Bearer <YOUR_JWT_TOKEN>
 Content-Type: application/json
 ```
 
@@ -600,6 +621,7 @@ Hard-deletes the rule. It will no longer be evaluated on future requests.
 
 ```http
 DELETE http://localhost:8083/v1/rules/a1b2c3d4-e5f6-7890-abcd-ef1234567890
+Authorization: Bearer <YOUR_JWT_TOKEN>
 ```
 
 **Response:** `204 No Content` on success, `404 Not Found` if the ID doesn't exist.
@@ -653,6 +675,7 @@ Here's an example of adding a login brute-force protection rule from scratch:
 
 ```bash
 curl -X POST http://localhost:8083/v1/rules \
+  -H "Authorization: Bearer <YOUR_JWT_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "block-brute-force",
@@ -669,11 +692,13 @@ curl -X POST http://localhost:8083/v1/rules \
 ```bash
 # Should return "allow" (4 attempts, under threshold)
 curl -X POST http://localhost:8083/v1/validate \
+  -H "Authorization: Bearer <YOUR_JWT_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{"context":"user_login","input":{"failed_attempts":4}}'
 
 # Should return "block" (6 attempts, over threshold)
 curl -X POST http://localhost:8083/v1/validate \
+  -H "Authorization: Bearer <YOUR_JWT_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{"context":"user_login","input":{"failed_attempts":6}}'
 ```
@@ -683,6 +708,7 @@ curl -X POST http://localhost:8083/v1/validate \
 ```bash
 # Add a warning-level score rule at lower priority (runs AFTER block rules)
 curl -X POST http://localhost:8083/v1/rules \
+  -H "Authorization: Bearer <YOUR_JWT_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "score-suspicious-attempts",
@@ -699,6 +725,7 @@ curl -X POST http://localhost:8083/v1/rules \
 
 ```bash
 curl -X PUT http://localhost:8083/v1/rules/<RULE_ID> \
+  -H "Authorization: Bearer <YOUR_JWT_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "score-suspicious-attempts",

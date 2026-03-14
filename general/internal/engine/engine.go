@@ -5,19 +5,20 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"general/internal/db"
+	"sync"
 	"time"
 
-	"general/internal/db"
-
+	"github.com/google/cel-go/cel"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // RuleEngine orchestrates validation
 type RuleEngine struct {
-	queries   *db.Queries
-	evaluator *Evaluator
+	queries       *db.Queries
+	evaluator     *Evaluator
+	programeCache sync.Map //// map[string]cel.Program (key = rule ID as string)
 }
-
 
 // NewRuleEngine creates the engine
 func NewRuleEngine(queries *db.Queries) (*RuleEngine, error) {
@@ -103,14 +104,13 @@ func pgUUIDToString(u pgtype.UUID) string {
 }
 
 // Validate runs all rules for a context and returns decision
-func (re *RuleEngine) Validate(ctx context.Context, req ValidationRequest) (*ValidationResult, error) {
+// Validate runs all rules for a context and returns decision
+func (re *RuleEngine) Validate(ctx context.Context, tenantID pgtype.UUID, req ValidationRequest) (*ValidationResult, error) {
 	start := time.Now()
 
 	// 1. Fetch active rules for this context (already sorted by priority)
-	zeroUUID := pgtype.UUID{Bytes: [16]byte{}, Valid: true}
-
 	rules, err := re.queries.ListRulesByContext(ctx, db.ListRulesByContextParams{
-		TenantID: zeroUUID,
+		TenantID: tenantID,
 		Context:  req.Context,
 	})
 	if err != nil {
@@ -118,22 +118,34 @@ func (re *RuleEngine) Validate(ctx context.Context, req ValidationRequest) (*Val
 	}
 
 	result := &ValidationResult{
-		Decision:     "allow", // Default: allow unless rule says otherwise
+		Decision:     "allow",
 		Score:        0,
 		RulesMatched: []string{},
 	}
 
 	// 2. Evaluate each rule in priority order
 	for _, rule := range rules {
-		// Compile the CEL expression (in production, cache this)
-		program, err := re.evaluator.CompileRule(rule.Condition)
-		if err != nil {
-			// Log error but continue with other rules
-			fmt.Printf("Failed to compile rule %s: %v\n", rule.Name, err)
-			continue
+		// Build cache key
+		tenantKey := pgUUIDToString(tenantID)
+		ruleKey := pgUUIDToString(rule.ID)
+		cacheKey := tenantKey + ":" + ruleKey
+
+		// Get from cache or compile
+		progIface, ok := re.programeCache.Load(cacheKey)
+		var program cel.Program
+		if !ok {
+			prog, err := re.evaluator.CompileRule(rule.Condition)
+			if err != nil {
+				fmt.Printf("Failed to compile rule %s: %v\n", rule.Name, err)
+				continue
+			}
+			re.programeCache.Store(cacheKey, prog)
+			program = prog
+		} else {
+			program = progIface.(cel.Program)
 		}
 
-		// Evaluate against input
+		// Evaluate
 		matched, err := re.evaluator.Evaluate(program, req.Input)
 		if err != nil {
 			fmt.Printf("Failed to evaluate rule %s: %v\n", rule.Name, err)
@@ -141,40 +153,35 @@ func (re *RuleEngine) Validate(ctx context.Context, req ValidationRequest) (*Val
 		}
 
 		if !matched {
-			continue // Rule didn't match, check next
+			continue
 		}
 
 		// Rule matched!
 		result.RulesMatched = append(result.RulesMatched, rule.Name)
 
-		// Apply action
+		// Apply action (unchanged)
 		switch rule.Action {
 		case "allow":
 			result.Decision = "allow"
 			result.Reason = fmt.Sprintf("Rule '%s' explicitly allowed", rule.Name)
-			return result, nil // Stop evaluation
-
+			return result, nil
 		case "block":
 			result.Decision = "block"
 			result.Reason = fmt.Sprintf("Rule '%s' blocked: %s", rule.Name, rule.Condition)
-			return result, nil // Stop evaluation
-
+			return result, nil
 		case "challenge":
 			result.Decision = "challenge"
 			result.Reason = fmt.Sprintf("Rule '%s' requires challenge", rule.Name)
-			// Continue to see if something blocks, but minimum is challenge
-
 		case "score":
 			if rule.Score != nil {
 				result.Score += int(*rule.Score)
 			}
-
 		case "flag":
-			// Just log it, continue evaluation
+			// just continue
 		}
 	}
 
-	// 3. Check cumulative score thresholds (simplified)
+	// 3. Score thresholds (unchanged)
 	if result.Score >= 100 {
 		result.Decision = "block"
 		result.Reason = fmt.Sprintf("Cumulative score %d exceeded threshold", result.Score)
@@ -183,20 +190,17 @@ func (re *RuleEngine) Validate(ctx context.Context, req ValidationRequest) (*Val
 		result.Reason = fmt.Sprintf("Cumulative score %d requires verification", result.Score)
 	}
 
-	// 4. Log the decision
+	// 4. Log decision (unchanged)
 	processingTime := int(time.Since(start).Milliseconds())
-
-	// Convert matched rules to UUIDs for storage
 	matchedRuleIDs := make([]pgtype.UUID, len(result.RulesMatched))
-	// ... (simplified, would map names to IDs)
-
+	// ... (you still need to populate matchedRuleIDs properly)
 	inputBytes, _ := json.Marshal(req.Input)
 	finalScore := int32(result.Score)
 
 	_, err = re.queries.CreateDecision(ctx, db.CreateDecisionParams{
-		TenantID:         zeroUUID,
+		TenantID:         tenantID,
 		Context:          req.Context,
-		Input:            inputBytes, // JSONB
+		Input:            inputBytes,
 		MatchedRules:     matchedRuleIDs,
 		Decision:         result.Decision,
 		FinalScore:       &finalScore,
@@ -204,10 +208,26 @@ func (re *RuleEngine) Validate(ctx context.Context, req ValidationRequest) (*Val
 		ProcessingTimeMs: int32(processingTime),
 	})
 	if err != nil {
-		// Log but don't fail the request
 		fmt.Printf("Failed to log decision: %v\n", err)
 	}
 
 	result.ProcessingTimeMs = processingTime
 	return result, nil
+}
+
+// InvalidateRule removes a specific rule from the cache.
+func (re *RuleEngine) InvalidateRule(tenantID pgtype.UUID, ruleID pgtype.UUID) {
+	key := pgUUIDToString(tenantID) + ":" + pgUUIDToString(ruleID)
+	re.programeCache.Delete(key)
+}
+
+// StoreRule compiles and caches a rule. Returns error if compilation fails.
+func (re *RuleEngine) StoreRule(tenantID pgtype.UUID, ruleID pgtype.UUID, condition string) error {
+	prog, err := re.evaluator.CompileRule(condition)
+	if err != nil {
+		return err
+	}
+	key := pgUUIDToString(tenantID) + ":" + pgUUIDToString(ruleID)
+	re.programeCache.Store(key, prog)
+	return nil
 }
