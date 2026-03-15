@@ -3,22 +3,56 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"log"
-	"net/http"
-	"time"
-
 	"general/internal/db"
 	"general/internal/engine"
 	"general/internal/middleware"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func main() {
-	connString := "postgres://asguard:devpassword@localhost:5433/general_engine?sslmode=disable"
+type Config struct {
+	DBHost     string
+	DBPort     string
+	DBUser     string
+	DBPassword string
+	DBName     string
+	Port       string
+	JWTSecret  string
+}
 
+func loadConfig() *Config {
+	return &Config{
+		DBHost:     getEnv("DB_HOST", "localhost"),
+		DBPort:     getEnv("DB_PORT", "5433"),
+		DBUser:     getEnv("DB_USER", "asguard"),
+		DBPassword: getEnv("DB_PASSWORD", "devpassword"),
+		DBName:     getEnv("DB_NAME", "general_engine"),
+		Port:       getEnv("PORT", "8083"),
+		JWTSecret:  getEnv("JWT_SECRET", ""),
+	}
+
+}
+
+func getEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+
+	return defaultValue
+}
+
+func main() {
+
+	cfg := loadConfig()
+	connString := "postgres://" + cfg.DBUser + ":" + cfg.DBPassword + "@" + cfg.DBHost + ":" + cfg.DBPort + "/" + cfg.DBName + "?sslmode=disable"
 	conn, err := pgx.Connect(context.Background(), connString)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
@@ -68,12 +102,34 @@ func main() {
 		}
 	})
 
-	// WRAP WITH MIDDLEWARE - This is the key line
-	handler := middleware.AuthMiddleware(mux)
+	// WRAP WITH MIDDLEWARE
+	handler := middleware.AuthMiddleware([]byte(cfg.JWTSecret))(mux)
 
-	port := "8083"
-	log.Printf("General Validation Engine starting on port %s", port)
-	log.Fatal(http.ListenAndServe(":"+port, handler)) // Use handler, not nil
+	srv := &http.Server{
+		Addr:    ":" + cfg.Port,
+		Handler: handler,
+	}
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		log.Printf("General Validation Engine starting on port %s", cfg.Port)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("listen: %s\n", err)
+		}
+	}()
+
+	<-quit
+	log.Println("Shutting Down Server.....")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatalf("Server shutdown failed: %v", err)
+	}
+	log.Println("Server shutdown successfully")
 }
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
@@ -187,19 +243,25 @@ func createRuleHandler(queries *db.Queries, ruleEngine *engine.RuleEngine) http.
 		}
 
 		// Validate required fields
-		if req.Name == "" || req.Context == "" || req.Action == "" {
-			http.Error(w, "Mising required fields", http.StatusBadRequest)
+		if req.Name == "" || req.Context == "" || req.Condition == "" || req.Action == "" {
+			http.Error(w, "Missing required fields: name, context, condition, action", http.StatusBadRequest)
 			return
 		}
 
+		//validate action type
 		validActions := map[string]bool{"allow": true, "block": true, "challenge": true, "flag": true, "score": true}
 		if !validActions[req.Action] {
 			http.Error(w, "Invalid action. Must be: allow, block, challenge, flag, score", http.StatusBadRequest)
 			return
 		}
 
-		ctx := r.Context()
+		// validate CEL syntax
+		if _, err := ruleEngine.Evaluator.CompileRule(req.Condition); err != nil {
+			http.Error(w, "Invalid CEL syntax: "+err.Error(), http.StatusBadRequest)
+			return
+		}
 
+		ctx := r.Context()
 		// Extract tenant ID from JWT context (works with UUID strings and slugs alike)
 		tenantIDStr := middleware.GetTenantID(ctx)
 		if tenantIDStr == "" {
@@ -292,6 +354,11 @@ func updateRuleHandler(queries *db.Queries, ruleEngine *engine.RuleEngine, id st
 
 		if req.Name == "" || req.Context == "" || req.Condition == "" || req.Action == "" {
 			http.Error(w, "Missing required fields", http.StatusBadRequest)
+			return
+		}
+
+		if _, err := ruleEngine.Evaluator.CompileRule(req.Condition); err != nil {
+			http.Error(w, "Invalid CEL syntax: "+err.Error(), http.StatusBadRequest)
 			return
 		}
 

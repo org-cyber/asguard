@@ -16,7 +16,7 @@ import (
 // RuleEngine orchestrates validation
 type RuleEngine struct {
 	queries       *db.Queries
-	evaluator     *Evaluator
+	Evaluator     *Evaluator
 	programeCache sync.Map //// map[string]cel.Program (key = rule ID as string)
 }
 
@@ -29,7 +29,7 @@ func NewRuleEngine(queries *db.Queries) (*RuleEngine, error) {
 
 	return &RuleEngine{
 		queries:   queries,
-		evaluator: eval,
+		Evaluator: eval,
 	}, nil
 }
 
@@ -135,7 +135,7 @@ func (re *RuleEngine) Validate(ctx context.Context, tenantID pgtype.UUID, req Va
 		progIface, ok := re.programeCache.Load(cacheKey)
 		var program cel.Program
 		if !ok {
-			prog, err := re.evaluator.CompileRule(rule.Condition)
+			prog, err := re.Evaluator.CompileRule(rule.Condition)
 			if err != nil {
 				fmt.Printf("Failed to compile rule %s: %v\n", rule.Name, err)
 				continue
@@ -147,7 +147,7 @@ func (re *RuleEngine) Validate(ctx context.Context, tenantID pgtype.UUID, req Va
 		}
 
 		// Evaluate
-		matched, err := re.evaluator.Evaluate(program, req.Input)
+		matched, err := re.Evaluator.Evaluate(program, req.Input)
 		if err != nil {
 			fmt.Printf("Failed to evaluate rule %s: %v\n", rule.Name, err)
 			continue
@@ -294,7 +294,7 @@ func (re *RuleEngine) InvalidateRule(tenantID pgtype.UUID, ruleID pgtype.UUID) {
 
 // StoreRule compiles and caches a rule. Returns error if compilation fails.
 func (re *RuleEngine) StoreRule(tenantID pgtype.UUID, ruleID pgtype.UUID, condition string) error {
-	prog, err := re.evaluator.CompileRule(condition)
+	prog, err := re.Evaluator.CompileRule(condition)
 	if err != nil {
 		return err
 	}
