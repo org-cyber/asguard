@@ -37,22 +37,18 @@ func NewLocalRateLimiter(rps float64, burst int) *LocalRateLimiter {
 }
 
 func (l *LocalRateLimiter) Allow(ctx context.Context, key string) bool {
-	l.mu.RLock()
-	client, exists := l.limiters[key]
-	l.mu.RUnlock()
+	l.mu.Lock()
+	defer l.mu.Unlock()
 
+	client, exists := l.limiters[key]
 	if !exists {
-		l.mu.Lock()
-		// Double-check under write lock
-		if client, exists = l.limiters[key]; !exists {
-			newLimiter := rate.NewLimiter(l.rate, l.burst)
-			client = &rateClient{limiter: newLimiter, lastSeen: time.Now()}
-			l.limiters[key] = client
+		client = &rateClient{
+			limiter:  rate.NewLimiter(l.rate, l.burst),
+			lastSeen: time.Now(),
 		}
-		l.mu.Unlock()
+		l.limiters[key] = client
 	}
 
-	// Update last seen
 	client.lastSeen = time.Now()
 	return client.limiter.Allow()
 }
