@@ -2,14 +2,19 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"general/internal/auth"
+
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/joho/godotenv"
 )
 
 func main() {
-	secret := []byte("my-secret-key") // Match your JWT_SECRET env var
+	// token.go
+	_ = godotenv.Load()
+	secret := []byte(os.Getenv("JWT_SECRET")) // Match your JWT_SECRET env var
 
 	claims := auth.Claims{
 		TenantID: "tenant-beta-inc",

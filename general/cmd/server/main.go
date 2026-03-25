@@ -10,33 +10,41 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
+	"github.com/joho/godotenv"
+
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Config struct {
-	DBHost     string
-	DBPort     string
-	DBUser     string
-	DBPassword string
-	DBName     string
-	Port       string
-	JWTSecret  string
+	DBHost         string
+	DBPort         string
+	DBUser         string
+	DBPassword     string
+	DBName         string
+	Port           string
+	RateLimitRPS   float64
+	RateLimitBurst int
+	JWTSecret      string
 }
 
 func loadConfig() *Config {
+	_ = godotenv.Load()
 	return &Config{
-		DBHost:     getEnv("DB_HOST", "localhost"),
-		DBPort:     getEnv("DB_PORT", "5433"),
-		DBUser:     getEnv("DB_USER", "asguard"),
-		DBPassword: getEnv("DB_PASSWORD", "devpassword"),
-		DBName:     getEnv("DB_NAME", "general_engine"),
-		Port:       getEnv("PORT", "8083"),
-		JWTSecret:  getEnv("JWT_SECRET", ""),
+		DBHost:         getEnv("DB_HOST", "localhost"),
+		DBPort:         getEnv("DB_PORT", "5433"),
+		DBUser:         getEnv("DB_USER", "asguard"),
+		DBPassword:     getEnv("DB_PASSWORD", "devpassword"),
+		DBName:         getEnv("DB_NAME", "general_engine"),
+		Port:           getEnv("PORT", "8083"),
+		RateLimitRPS:   getEnvFloat("RATE_LIMIT_REQUESTS_PER_SECOND", 10.0),
+		RateLimitBurst: getEnvInt("RATE_LIMIT_BURST", 20),
+		JWTSecret:      getEnv("JWT_SECRET", ""),
 	}
 
 }
@@ -49,17 +57,39 @@ func getEnv(key, defaultValue string) string {
 	return defaultValue
 }
 
+// getEnvFloat returns the environment variable as float64, or defaultValue.
+func getEnvFloat(key string, defaultValue float64) float64 {
+	if val := os.Getenv(key); val != "" {
+		if f, err := strconv.ParseFloat(val, 64); err == nil {
+			return f
+		}
+	}
+	return defaultValue
+}
+
+// getEnvInt returns the environment variable as int, or defaultValue.
+func getEnvInt(key string, defaultValue int) int {
+	if val := os.Getenv(key); val != "" {
+		if i, err := strconv.Atoi(val); err == nil {
+			return i
+		}
+	}
+	return defaultValue
+}
+
 func main() {
 
 	cfg := loadConfig()
+	log.Printf("JWT secret loaded: %t", cfg.JWTSecret != "")
 	connString := "postgres://" + cfg.DBUser + ":" + cfg.DBPassword + "@" + cfg.DBHost + ":" + cfg.DBPort + "/" + cfg.DBName + "?sslmode=disable"
-	conn, err := pgx.Connect(context.Background(), connString)
+
+	pool, err := pgxpool.New(context.Background(), connString)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
-	defer conn.Close(context.Background())
+	defer pool.Close()
 
-	queries := db.New(conn)
+	queries := db.New(pool)
 	ruleEngine, err := engine.NewRuleEngine(queries)
 	if err != nil {
 		log.Fatalf("Failed to create rule engine: %v", err)
@@ -68,7 +98,7 @@ func main() {
 	// Create router
 	mux := http.NewServeMux()
 
-	// Routes (same as before)
+	// Routes
 	mux.HandleFunc("/health", healthHandler)
 	mux.HandleFunc("/v1/validate", validateHandler(ruleEngine))
 
@@ -102,8 +132,14 @@ func main() {
 		}
 	})
 
-	// WRAP WITH MIDDLEWARE
-	handler := middleware.AuthMiddleware([]byte(cfg.JWTSecret))(mux)
+	limiter := middleware.NewLocalRateLimiter(cfg.RateLimitRPS, cfg.RateLimitBurst) //rate limiter
+
+	//  middlewares order: Auth → RateLimit → mux
+	handler := middleware.AuthMiddleware([]byte(cfg.JWTSecret))(
+		middleware.RateLimitMiddleware(limiter)(
+			mux,
+		),
+	)
 
 	srv := &http.Server{
 		Addr:    ":" + cfg.Port,

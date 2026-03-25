@@ -49,6 +49,7 @@ func main() {
 	log.Printf("API keys configured: %d", len(apiKeys))
 
 	// Set up HTTP server
+	//setup Cors
 	// Set up HTTP server
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
@@ -61,7 +62,7 @@ func main() {
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"}, // ADD Authorization
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
-	}))
+	})) // remove later to d isplayt cors
 	r.Use(authMiddleware())
 
 	// Routes

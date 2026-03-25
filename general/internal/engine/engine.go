@@ -248,7 +248,7 @@ func (re *RuleEngine) Validate(ctx context.Context, tenantID pgtype.UUID, req Va
 				fmt.Printf("Failed to log decision: %v\n", err)
 			}
 			result.ProcessingTimeMs = processingTime
-			return result, nil
+			continue
 		}
 	}
 
