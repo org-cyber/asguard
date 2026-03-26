@@ -30,5 +30,6 @@ WORKDIR /app
 # Copy the compiled binary from the builder stage
 COPY --from=builder /app/face-service /app/face-service
 
+COPY models/ /app/models/
 # The command to run when the container starts
 CMD ["/app/face-service"]

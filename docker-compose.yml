@@ -1,35 +1,63 @@
 version: '3.8'
 
 services:
-  backend:
+  # General Validation Engine
+  general:
     build:
-      context: ./backend
+      context: ./general
       dockerfile: Dockerfile
     ports:
-      - "8081:8081"
+      - "8083:8083"
     environment:
-      - ASGUARD_API_KEY=devsecret
-      - PORT=8081
+      - PORT=8083
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=${DB_USER:-asguard}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=general_engine
+      - JWT_SECRET=${JWT_SECRET}
+      - RATE_LIMIT_REQUESTS_PER_SECOND=10
+      - RATE_LIMIT_BURST=20
+    depends_on:
+      - postgres
+    networks:
+      - asguard-network
+    restart: unless-stopped
+
+  # PostgreSQL for General Engine
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=${DB_USER:-asguard}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=general_engine
     volumes:
-      - ./backend:/app
-   # command: ["go", "run", "main.go"]
+      - postgres_data:/var/lib/postgresql/data
+      - ./general/schema.sql:/docker-entrypoint-initdb.d/001_schema.sql
+    networks:
+      - asguard-network
+    restart: unless-stopped
 
-  
-
-
-    
-  asguard-face:
-    build: ./asguard-face
+  # Face Verification Service
+  face:
+    build:
+      context: ./asguard-face
+      dockerfile: Dockerfile
     ports:
       - "8082:8082"
     environment:
       - PORT=8082
       - MODELS_PATH=/app/models
-      - API_KEYS=${FACE_API_KEYS:-dev-key-123}
+      - API_KEYS=${FACE_API_KEYS}
     volumes:
-      - ./models:/app/models:ro
+      - face_models:/app/models:ro
     networks:
       - asguard-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  face_models:
 
 networks:
   asguard-network:

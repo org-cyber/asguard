@@ -1,0 +1,47 @@
+# ---- Build general engine ----
+FROM golang:1.25-alpine AS general-builder
+WORKDIR /app/general
+COPY general/go.mod general/go.sum ./
+RUN go mod download
+COPY general/ .
+RUN go build -o general_engine ./cmd/server
+
+# ---- Build face service ----
+FROM golang:1.25-bookworm AS face-builder
+WORKDIR /app/face
+COPY asguard-face/go.mod asguard-face/go.sum ./
+RUN go mod download
+COPY asguard-face/ .
+# Note: face service already includes models via volume; we'll copy them later
+RUN CGO_ENABLED=1 GOOS=linux go build -o face_service .
+
+# ---- Build proxy ----
+FROM golang:1.25-alpine AS proxy-builder
+WORKDIR /app
+COPY proxy.go .
+RUN go build -o proxy proxy.go
+
+# ---- Final image ----
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates libdlib19.1 libopenblas0 liblapack3 libjpeg62-turbo \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /root/
+
+# Copy binaries
+COPY --from=general-builder /app/general/general_engine .
+COPY --from=face-builder /app/face/face_service .
+COPY --from=proxy-builder /app/proxy .
+
+# Copy face models (from your asguard-face folder)
+COPY asguard-face/models ./models/
+
+# Copy entrypoint
+COPY entrypoint.sh .
+RUN chmod +x entrypoint.sh
+
+# Expose the proxy port (Render will use this)
+EXPOSE 8080
+
+CMD ["./entrypoint.sh"]
